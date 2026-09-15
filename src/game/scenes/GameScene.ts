@@ -18,8 +18,8 @@ interface Box {
 
 /**
  * 主游戏场景。
- * 步骤 6：加入箱子，实现推箱子（箱子不能被推进墙或另一个箱子）。
- * 后续步骤会加入胜负判定和 UI。
+ * 步骤 7：加入步数统计、胜利判定（所有目标点都有箱子）和 R 键重开。
+ * MVP 到此完整。
  */
 export class GameScene extends Phaser.Scene {
   private level!: LevelData;
@@ -38,8 +38,16 @@ export class GameScene extends Phaser.Scene {
   /** WASD 键 */
   // Record<k, v> => { k: v }
   private wasdKeys!: Record<"w" | "a" | "s" | "d", Phaser.Input.Keyboard.Key>;
+  /** R 键（重开） */
+  private rKey!: Phaser.Input.Keyboard.Key;
   /** 移动动画进行中，防止连续输入导致坐标与画面脱节 */
   private isMoving = false;
+  /** 是否已通关（通关后停止输入） */
+  private won = false;
+  /** 步数 */
+  private steps = 0;
+  /** 步数文本 */
+  private stepsText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: "GameScene" });
@@ -56,7 +64,7 @@ export class GameScene extends Phaser.Scene {
     // 玩家逻辑坐标取关卡初始位置
     this.playerPos = { ...this.level.player };
 
-    // 初始化键盘输入（方向键 + WASD）
+    // 初始化键盘输入（方向键 + WASD + R）
     const keyboard = this.input.keyboard!;
     this.cursors = keyboard.createCursorKeys();
     this.wasdKeys = {
@@ -65,15 +73,24 @@ export class GameScene extends Phaser.Scene {
       s: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       d: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
+    this.rKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
     // 执行渲染函数
     this.renderGrid();
     this.renderBoxes();
     this.renderPlayer();
+    this.renderHud();
   }
 
   update(): void {
-    if (this.isMoving) return;
+    // R 键随时重开
+    if (Phaser.Input.Keyboard.JustDown(this.rKey)) {
+      this.scene.restart();
+      return;
+    }
+
+    // 已通关或移动中，忽略输入
+    if (this.won || this.isMoving) return;
 
     const { dx, dy } = this.readMoveInput();
     if (dx === 0 && dy === 0) return;
@@ -117,6 +134,61 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.movePlayer(nx, ny);
     }
+
+    // 一次有效移动完成后：计步 + 判胜
+    this.onMoved();
+  }
+
+  /** 每次有效移动后调用：步数 +1，并检查是否通关 */
+  private onMoved(): void {
+    this.steps++;
+    this.stepsText.setText(`步数: ${this.steps}`);
+
+    if (this.checkWin()) {
+      this.onWin();
+    }
+  }
+
+  /** 所有目标点是否都有箱子 */
+  private checkWin(): boolean {
+    const { grid } = this.level;
+    for (let y = 0; y < grid.length; y++) {
+      for (let x = 0; x < grid[y].length; x++) {
+        if (grid[y][x] === Cell.Goal && !this.findBoxAt(x, y)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /** 通关处理：锁定输入 + 显示过关提示 */
+  private onWin(): void {
+    this.won = true;
+
+    // 半透明遮罩
+    this.add
+      .rectangle(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        GAME_WIDTH,
+        GAME_HEIGHT,
+        0x000000,
+        0.6,
+      )
+      .setOrigin(0.5)
+      .setDepth(9);
+
+    // 过关文字
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "过关！\n按 R 重开", {
+        fontSize: "48px",
+        color: "#f1c40f",
+        fontFamily: "sans-serif",
+        align: "center",
+      })
+      .setOrigin(0.5)
+      .setDepth(10);
   }
 
   /** 目标格是否被墙或边界阻挡 */
@@ -276,5 +348,16 @@ export class GameScene extends Phaser.Scene {
       .rectangle(x, y, TILE_SIZE, TILE_SIZE, COLORS.player, 1)
       .setOrigin(0)
       .setDepth(3);
+  }
+
+  /** 渲染 HUD（步数） */
+  private renderHud(): void {
+    this.stepsText = this.add
+      .text(16, 16, "步数: 0", {
+        fontSize: "24px",
+        color: "#ffffff",
+        fontFamily: "sans-serif",
+      })
+      .setDepth(10);
   }
 }
