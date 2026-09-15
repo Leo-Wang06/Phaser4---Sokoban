@@ -1,5 +1,6 @@
-import Phaser from 'phaser';
-import { GameScene } from './scenes/GameScene';
+import Phaser from "phaser";
+import { GAME_HEIGHT, GAME_WIDTH } from "./constants";
+import { GameScene } from "./scenes/GameScene";
 
 /**
  * 创建 Phaser 游戏实例并挂载到传入的 DOM 容器上。
@@ -8,10 +9,10 @@ import { GameScene } from './scenes/GameScene';
 export function createGame(parent: HTMLElement): Phaser.Game {
   return new Phaser.Game({
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
     parent,
-    backgroundColor: '#1b1b1b',
+    backgroundColor: "#111111",
     scene: [GameScene],
   });
 }
