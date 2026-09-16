@@ -75,19 +75,10 @@ export class GameScene extends Phaser.Scene {
     this.renderHud();
   }
 
-  update(): void {
-    // 已通关或移动中，忽略输入
-    if (this.won || this.isMoving) return;
-  }
   /** 计算鼠标点击玩家相邻格 */
   private handleTap(pointer: Phaser.Input.Pointer): void {
     // 通关之后点击 -> 重开
-    if (this.won) {
-      this.scene.restart();
-      return;
-    }
-
-    if (this.isMoving) return;
+    if (this.won || this.isMoving) return;
 
     // 屏幕坐标 -> 地图坐标 -> 网格坐标
     const { x: col, y: row } = pixelToGrid(
@@ -99,7 +90,7 @@ export class GameScene extends Phaser.Scene {
     const dx = col - this.playerPos.x;
     const dy = row - this.playerPos.y;
 
-    if (Math.abs(dx) + Math.abs(dy) != 1) return;
+    if (Math.abs(dx) + Math.abs(dy) !== 1) return;
 
     this.tryMove(dx, dy);
   }
@@ -171,7 +162,7 @@ export class GameScene extends Phaser.Scene {
 
     // 过关文字
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "过关！\n按屏幕任意位置重开", {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "过关！\n点击重开按钮重开", {
         fontSize: "48px",
         color: "#f1c40f",
         fontFamily: "sans-serif",
@@ -340,7 +331,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(3);
   }
 
-  /** 渲染 HUD（步数） */
+  /** 渲染 HUD（步数） + 重开按钮 */
   private renderHud(): void {
     this.stepsText = this.add
       .text(16, 16, "步数: 0", {
@@ -349,5 +340,27 @@ export class GameScene extends Phaser.Scene {
         fontFamily: "sans-serif",
       })
       .setDepth(10);
+
+    // 常驻（重开）按钮（右上角, depth 20 高于通关遮罩，通关后仍然可点）
+    const btnW = 96;
+    const btnH = 44;
+    const btnX = GAME_WIDTH - 16;
+    const btnY = 16;
+
+    this.add
+      .rectangle(btnX, btnY, btnW, btnH, 0x555555, 1)
+      .setOrigin(1, 0)
+      .setDepth(20)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerdown", () => this.scene.restart());
+
+    this.add
+      .text(btnX - btnW / 2, btnY + btnH / 2, "重开", {
+        fontSize: "24px",
+        color: "#ffffff",
+        fontFamily: "sans-serif",
+      })
+      .setOrigin(0.5)
+      .setDepth(21);
   }
 }
