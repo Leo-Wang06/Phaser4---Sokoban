@@ -5,6 +5,7 @@ import {
   GAME_WIDTH,
   TILE_SIZE,
   gridToPixel,
+  pixelToGrid,
 } from "../constants";
 import { level1 } from "../data/levels";
 import { Cell, type LevelData, type Vec2 } from "../types";
@@ -33,13 +34,6 @@ export class GameScene extends Phaser.Scene {
   private playerRect!: Phaser.GameObjects.Rectangle;
   /** 所有箱子 */
   private boxes: Box[] = [];
-  /** 方向键 */
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  /** WASD 键 */
-  // Record<k, v> => { k: v }
-  private wasdKeys!: Record<"w" | "a" | "s" | "d", Phaser.Input.Keyboard.Key>;
-  /** R 键（重开） */
-  private rKey!: Phaser.Input.Keyboard.Key;
   /** 移动动画进行中，防止连续输入导致坐标与画面脱节 */
   private isMoving = false;
   /** 是否已通关（通关后停止输入） */
@@ -54,6 +48,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // restart 复用场景实例，重置可变状态
+    this.won = false;
+    this.steps = 0;
+    this.isMoving = false;
+
     // parseLevel解析level1的数据，返回LevelData
     this.level = parseLevel(level1);
 
@@ -64,16 +63,10 @@ export class GameScene extends Phaser.Scene {
     // 玩家逻辑坐标取关卡初始位置
     this.playerPos = { ...this.level.player };
 
-    // 初始化键盘输入（方向键 + WASD + R）
-    const keyboard = this.input.keyboard!;
-    this.cursors = keyboard.createCursorKeys();
-    this.wasdKeys = {
-      w: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-      a: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-      s: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-      d: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-    };
-    this.rKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+    // 监听鼠标事件 并获取对应的像素坐标
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      this.handleTap(pointer);
+    });
 
     // 执行渲染函数
     this.renderGrid();
@@ -83,35 +76,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(): void {
-    // R 键随时重开
-    if (Phaser.Input.Keyboard.JustDown(this.rKey)) {
+    // 已通关或移动中，忽略输入
+    if (this.won || this.isMoving) return;
+  }
+  /** 计算鼠标点击玩家相邻格 */
+  private handleTap(pointer: Phaser.Input.Pointer): void {
+    // 通关之后点击 -> 重开
+    if (this.won) {
       this.scene.restart();
       return;
     }
 
-    // 已通关或移动中，忽略输入
-    if (this.won || this.isMoving) return;
+    if (this.isMoving) return;
 
-    const { dx, dy } = this.readMoveInput();
-    if (dx === 0 && dy === 0) return;
+    // 屏幕坐标 -> 地图坐标 -> 网格坐标
+    const { x: col, y: row } = pixelToGrid(
+      pointer.worldX - this.originX,
+      pointer.worldY - this.originY,
+    );
+
+    // 只响应上下左右相邻格
+    const dx = col - this.playerPos.x;
+    const dy = row - this.playerPos.y;
+
+    if (Math.abs(dx) + Math.abs(dy) != 1) return;
 
     this.tryMove(dx, dy);
-  }
-
-  /** 读取方向键/WASD 输入，返回本次移动方向（单次触发） */
-  private readMoveInput(): { dx: number; dy: number } {
-    // JustDown 函数传入 key: Phaser.Input.Keyboard.Key 返回 布尔值
-    const J = Phaser.Input.Keyboard.JustDown;
-    // 初始化移动的dx dy
-    let dx = 0;
-    let dy = 0;
-
-    if (J(this.cursors.left) || J(this.wasdKeys.a)) dx = -1;
-    else if (J(this.cursors.right) || J(this.wasdKeys.d)) dx = 1;
-    else if (J(this.cursors.up) || J(this.wasdKeys.w)) dy = -1;
-    else if (J(this.cursors.down) || J(this.wasdKeys.s)) dy = 1;
-
-    return { dx, dy };
   }
 
   /** 处理一次移动：依次考虑墙阻挡、箱子阻挡、推箱子、普通移动 */
@@ -181,7 +171,7 @@ export class GameScene extends Phaser.Scene {
 
     // 过关文字
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "过关！\n按 R 重开", {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "过关！\n按屏幕任意位置重开", {
         fontSize: "48px",
         color: "#f1c40f",
         fontFamily: "sans-serif",
