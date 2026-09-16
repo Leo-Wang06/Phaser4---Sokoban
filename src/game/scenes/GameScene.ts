@@ -1,6 +1,5 @@
 import Phaser from "phaser";
 import {
-  COLORS,
   GAME_HEIGHT,
   GAME_WIDTH,
   TILE_SIZE,
@@ -11,16 +10,15 @@ import { level1 } from "../data/levels";
 import { Cell, type LevelData, type Vec2 } from "../types";
 import { parseLevel } from "../utils/level";
 
-/** 箱子：逻辑坐标 + 可视化矩形 */
+/** 箱子：逻辑坐标 + 可视化图片 */
 interface Box {
   pos: Vec2;
-  rect: Phaser.GameObjects.Rectangle;
+  img: Phaser.GameObjects.Image;
 }
 
 /**
  * 主游戏场景。
- * 步骤 7：加入步数统计、胜利判定（所有目标点都有箱子）和 R 键重开。
- * MVP 到此完整。
+ * 已改为图片渲染 + 点击移动（移动端），包含推箱子、胜负判定和重开按钮。
  */
 export class GameScene extends Phaser.Scene {
   private level!: LevelData;
@@ -30,8 +28,8 @@ export class GameScene extends Phaser.Scene {
 
   /** 玩家当前网格坐标 */
   private playerPos!: Vec2;
-  /** 玩家的可视化矩形 */
-  private playerRect!: Phaser.GameObjects.Rectangle;
+  /** 玩家的可视化图片 */
+  private playerImg!: Phaser.GameObjects.Image;
   /** 所有箱子 */
   private boxes: Box[] = [];
   /** 移动动画进行中，防止连续输入导致坐标与画面脱节 */
@@ -45,6 +43,15 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super({ key: "GameScene" });
+  }
+
+  preload(): void {
+    // 预加载图片资源（路径相对 public/ 目录）
+    this.load.image("wall", "assets/wall.png");
+    this.load.image("floor", "assets/floor.png");
+    this.load.image("goal", "assets/goal.png");
+    this.load.image("box", "assets/box.webp");
+    this.load.image("player", "assets/player.jpeg");
   }
 
   create(): void {
@@ -77,7 +84,7 @@ export class GameScene extends Phaser.Scene {
 
   /** 计算鼠标点击玩家相邻格 */
   private handleTap(pointer: Phaser.Input.Pointer): void {
-    // 通关之后点击 -> 重开
+    // 通关或移动中 → 忽略
     if (this.won || this.isMoving) return;
 
     // 屏幕坐标 -> 地图坐标 -> 网格坐标
@@ -202,8 +209,8 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = this.cellToScreen(col, row);
     // 调用 Tween 补间动画
     this.tweens.add({
-      // 玩家的矩形
-      targets: this.playerRect,
+      // 玩家的图片
+      targets: this.playerImg,
       // 目标值
       x,
       y,
@@ -242,7 +249,7 @@ export class GameScene extends Phaser.Scene {
 
     // 执行 box 动画
     this.tweens.add({
-      targets: box.rect,
+      targets: box.img,
       x: bp.x,
       y: bp.y,
       duration: 120,
@@ -250,7 +257,7 @@ export class GameScene extends Phaser.Scene {
     });
     // 执行 player 动画
     this.tweens.add({
-      targets: this.playerRect,
+      targets: this.playerImg,
       x: pp.x,
       y: pp.y,
       duration: 120,
@@ -276,31 +283,28 @@ export class GameScene extends Phaser.Scene {
         switch (grid[y][x]) {
           case Cell.Wall:
             this.add
-              .rectangle(px, py, TILE_SIZE, TILE_SIZE, COLORS.wall, 1)
-              .setOrigin(0);
+              .image(px, py, "wall")
+              .setOrigin(0)
+              .setDisplaySize(TILE_SIZE, TILE_SIZE);
             break;
 
           case Cell.Floor:
             this.add
-              .rectangle(px, py, TILE_SIZE, TILE_SIZE, COLORS.floor, 1)
-              .setOrigin(0);
+              .image(px, py, "floor")
+              .setOrigin(0)
+              .setDisplaySize(TILE_SIZE, TILE_SIZE);
             break;
 
           case Cell.Goal:
-            // 地板 + 中间叠一个黄色目标标记
+            // 地板 + 叠一个目标点图片
             this.add
-              .rectangle(px, py, TILE_SIZE, TILE_SIZE, COLORS.floor, 1)
-              .setOrigin(0);
+              .image(px, py, "floor")
+              .setOrigin(0)
+              .setDisplaySize(TILE_SIZE, TILE_SIZE);
             this.add
-              .rectangle(
-                px + TILE_SIZE / 2,
-                py + TILE_SIZE / 2,
-                TILE_SIZE / 2,
-                TILE_SIZE / 2,
-                COLORS.goal,
-                1,
-              )
-              .setOrigin(0.5)
+              .image(px, py, "goal")
+              .setOrigin(0)
+              .setDisplaySize(TILE_SIZE, TILE_SIZE)
               .setDepth(1);
             break;
         }
@@ -312,11 +316,12 @@ export class GameScene extends Phaser.Scene {
   private renderBoxes(): void {
     this.boxes = this.level.boxes.map((pos) => {
       const { x, y } = this.cellToScreen(pos.x, pos.y);
-      const rect = this.add
-        .rectangle(x, y, TILE_SIZE, TILE_SIZE, COLORS.box, 1)
+      const img = this.add
+        .image(x, y, "box")
         .setOrigin(0)
+        .setDisplaySize(TILE_SIZE, TILE_SIZE)
         .setDepth(2);
-      return { pos: { ...pos }, rect };
+      return { pos: { ...pos }, img };
     });
   }
 
@@ -324,10 +329,11 @@ export class GameScene extends Phaser.Scene {
   private renderPlayer(): void {
     // 获取画面像素坐标
     const { x, y } = this.cellToScreen(this.playerPos.x, this.playerPos.y);
-    // 绘制玩家矩形
-    this.playerRect = this.add
-      .rectangle(x, y, TILE_SIZE, TILE_SIZE, COLORS.player, 1)
+    // 绘制玩家图片
+    this.playerImg = this.add
+      .image(x, y, "player")
       .setOrigin(0)
+      .setDisplaySize(TILE_SIZE, TILE_SIZE)
       .setDepth(3);
   }
 
